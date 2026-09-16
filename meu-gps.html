@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu GPS</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root {
+    --paper: #F2EFE6;
+    --paper-dark: #E6E1D2;
+    --ink: #2B2E26;
+    --ink-soft: #5C6152;
+    --moss: #4A6741;
+    --compass: #C1622D;
+    --line: #C9C2AC;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 48px;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  header {
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  p.sub {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    line-height: 1.4;
+    max-width: 46ch;
+  }
+
+  .panel {
+    background: var(--paper-dark);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  button {
+    background: var(--compass);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+  }
+
+  button:hover { filter: brightness(1.08); }
+  button:disabled { background: var(--ink-soft); cursor: wait; }
+
+  #status {
+    margin-top: 14px;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    min-height: 1.2em;
+  }
+
+  #status.error { color: #A3402E; }
+
+  .coords {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .coords.show { display: grid; }
+
+  .coord-item {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 10px 12px;
+  }
+
+  .coord-item .label {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+
+  .coord-item .value {
+    font-family: "SF Mono", "Consolas", "Menlo", monospace;
+    font-size: 0.95rem;
+    color: var(--moss);
+    font-weight: 600;
+  }
+
+  #map {
+    width: 100%;
+    height: 340px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--paper-dark);
+    display: none;
+  }
+
+  #map.show { display: block; }
+
+  footer {
+    margin-top: 20px;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Meu GPS</h1>
+      <p class="sub">Um exemplo simples de como pegar sua localização usando o GPS do dispositivo e mostrar num mapa, direto no navegador.</p>
+    </header>
+
+    <div class="panel">
+      <button id="btn">Mostrar minha localização</button>
+      <div id="status"></div>
+
+      <div class="coords" id="coords">
+        <div class="coord-item">
+          <div class="label">Latitude</div>
+          <div class="value" id="lat">—</div>
+        </div>
+        <div class="coord-item">
+          <div class="label">Longitude</div>
+          <div class="value" id="lng">—</div>
+        </div>
+        <div class="coord-item">
+          <div class="label">Precisão</div>
+          <div class="value" id="acc">—</div>
+        </div>
+        <div class="coord-item">
+          <div class="label">Atualizado às</div>
+          <div class="value" id="time">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <footer>Feito com a Geolocation API do navegador + Leaflet. Nenhum dado sai do seu dispositivo.</footer>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    const btn = document.getElementById('btn');
+    const statusEl = document.getElementById('status');
+    const coordsEl = document.getElementById('coords');
+    const mapEl = document.getElementById('map');
+    const latEl = document.getElementById('lat');
+    const lngEl = document.getElementById('lng');
+    const accEl = document.getElementById('acc');
+    const timeEl = document.getElementById('time');
+
+    let map, marker, circle;
+
+    function initMap(lat, lng, accuracy) {
+      mapEl.classList.add('show');
+      if (!map) {
+        map = L.map('map').setView([lat, lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(map);
+        marker = L.marker([lat, lng]).addTo(map);
+        circle = L.circle([lat, lng], { radius: accuracy, color: '#4A6741', fillOpacity: 0.1 }).addTo(map);
+      } else {
+        map.setView([lat, lng], 16);
+        marker.setLatLng([lat, lng]);
+        circle.setLatLng([lat, lng]);
+        circle.setRadius(accuracy);
+      }
+      // Leaflet precisa disso quando o mapa aparece depois de escondido
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    function onSuccess(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+
+      latEl.textContent = latitude.toFixed(6);
+      lngEl.textContent = longitude.toFixed(6);
+      accEl.textContent = `${Math.round(accuracy)} m`;
+      timeEl.textContent = new Date(position.timestamp).toLocaleTimeString('pt-BR');
+
+      coordsEl.classList.add('show');
+      statusEl.textContent = 'Localização encontrada.';
+      statusEl.classList.remove('error');
+
+      initMap(latitude, longitude, accuracy);
+
+      btn.disabled = false;
+      btn.textContent = 'Atualizar localização';
+    }
+
+    function onError(error) {
+      btn.disabled = false;
+      btn.textContent = 'Tentar novamente';
+      statusEl.classList.add('error');
+
+      const messages = {
+        1: 'Permissão negada. Autorize o acesso à localização nas configurações do navegador.',
+        2: 'Não foi possível determinar a localização agora.',
+        3: 'A busca demorou demais e foi cancelada.'
+      };
+      statusEl.textContent = messages[error.code] || 'Erro ao obter localização.';
+    }
+
+    btn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        statusEl.classList.add('error');
+        statusEl.textContent = 'Este navegador não suporta geolocalização.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Buscando...';
+      statusEl.classList.remove('error');
+      statusEl.textContent = 'Aguardando permissão e sinal de GPS...';
+
+      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    });
+  </script>
+</body>
+</html>
